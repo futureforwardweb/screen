@@ -12,7 +12,7 @@
       pointer-events: none;
       mix-blend-mode: screen;
       opacity: 0;
-      background: radial-gradient(ellipse at 50% 40%, rgba(255,200,80,0.35) 0%, transparent 65%);
+      background: radial-gradient(ellipse at 50% 40%, rgba(255,225,120,0.62) 0%, rgba(255,170,60,0.22) 38%, transparent 72%);
     }
   </style>
 </head>
@@ -49,18 +49,18 @@
 
     function scheduleSlow() {
       slowTimer = 0;
-      slowDuration = 300 + Math.random() * 600;
-      // More frequent and stronger dips
-      slowTarget = Math.random() < 0.55
-        ? (Math.random() * 0.7 + 0.15)
-        : (Math.random() * 0.1);
+      slowDuration = 180 + Math.random() * 420;
+      // Bias toward noticeable swings
+      slowTarget = Math.random() < 0.8
+        ? (Math.random() * 0.75 + 0.2)
+        : (Math.random() * 0.12);
     }
 
     function scheduleFast() {
       fastTimer = 0;
-      fastDuration = 40 + Math.random() * 120;
-      fastTarget = Math.random() < 0.4
-        ? (Math.random() * 0.4 + 0.1)
+      fastDuration = 22 + Math.random() * 78;
+      fastTarget = Math.random() < 0.72
+        ? (Math.random() * 0.75 + 0.22)
         : 0;
     }
 
@@ -100,18 +100,18 @@
       fastTimer += dt;
       if (fastTimer >= fastDuration) scheduleFast();
       const fastP = Math.min(fastTimer / fastDuration, 1);
-      fastCurrent += (fastTarget - fastCurrent) * 0.18;
-      const fastEased = Math.sin(fastP * Math.PI);
+      fastCurrent += (fastTarget - fastCurrent) * 0.32;
+      const fastEased = Math.pow(Math.sin(fastP * Math.PI), 0.8);
 
       // Combine: slow base + fast sputter on top
-      const combined = slowCurrent * 0.65 + fastCurrent * fastEased * 0.35;
-      const fo = Math.min(combined, 0.85);
+      const combined = slowCurrent * 0.55 + fastCurrent * fastEased * 0.75;
+      const fo = Math.min(combined, 1);
 
       // Dim multiplier — stronger dip effect
-      const dim = 1 - fo * 0.28;
+      const dim = 1 - fo * 0.45;
 
       bg.style.background = toHex(r * dim, g * dim, b * dim);
-      flicker.style.opacity = (fo * 0.9).toFixed(3);
+      flicker.style.opacity = (fo * 1.22).toFixed(3);
 
       requestAnimationFrame(tick);
     }
