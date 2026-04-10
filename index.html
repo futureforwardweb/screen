@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Candle Gradient</title>
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    #bg {
+      position: fixed; inset: 0;
+      background: #B8860B;
+    }
+    #flicker {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      opacity: 0;
+      background: radial-gradient(ellipse at 50% 40%, rgba(255,200,80,0.18) 0%, transparent 70%);
+    }
+  </style>
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="flicker"></div>
+  <script>
+    const bg = document.getElementById('bg');
+    const flicker = document.getElementById('flicker');
+
+    const DURATION = 7 * 60 * 1000;
+    const start = performance.now();
+
+    const startColor = { r: 184, g: 134, b: 11 };
+    const endColor   = { r: 0,   g: 255, b: 136 };
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    function toHex(r, g, b) {
+      return '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+    }
+
+    function easeInOut(t) {
+      return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    }
+
+    let flickerTarget = 0, flickerCurrent = 0;
+    let flickerTimer = 0, flickerDuration = 0;
+
+    function scheduleFlicker() {
+      flickerTimer = 0;
+      flickerDuration = 80 + Math.random() * 300;
+      flickerTarget = Math.random() < 0.35 ? (Math.random() * 0.55 + 0.08) : 0;
+    }
+
+    scheduleFlicker();
+
+    let lastT = 0;
+
+    function tick(now) {
+      const elapsed = now - start;
+      const rawT = Math.min(elapsed / DURATION, 1);
+      const t = easeInOut(rawT);
+
+      const r = lerp(startColor.r, endColor.r, t);
+      const g = lerp(startColor.g, endColor.g, t);
+      const b = lerp(startColor.b, endColor.b, t);
+
+      const dt = now - lastT;
+      lastT = now;
+
+      flickerTimer += dt;
+      if (flickerTimer >= flickerDuration) {
+        scheduleFlicker();
+      }
+      const flickerProgress = Math.min(flickerTimer / flickerDuration, 1);
+      const easedFlicker = Math.sin(flickerProgress * Math.PI);
+      flickerCurrent = flickerCurrent + (flickerTarget - flickerCurrent) * 0.12;
+      const flickerOpacity = flickerCurrent * easedFlicker;
+
+      const dim = 1 - flickerOpacity * 0.18;
+
+      bg.style.background = toHex(r * dim, g * dim, b * dim);
+      flicker.style.opacity = flickerOpacity.toFixed(3);
+
+      if (rawT < 1) requestAnimationFrame(tick);
+    }
+
+    lastT = performance.now();
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
