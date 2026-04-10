@@ -6,16 +6,13 @@
   <title>Candle Gradient</title>
   <style>
     body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-    #bg {
-      position: fixed; inset: 0;
-      background: #B8860B;
-    }
+    #bg { position: fixed; inset: 0; background: #B8860B; }
     #flicker {
       position: fixed; inset: 0;
       pointer-events: none;
       mix-blend-mode: screen;
       opacity: 0;
-      background: radial-gradient(ellipse at 50% 40%, rgba(255,200,80,0.18) 0%, transparent 70%);
+      background: radial-gradient(ellipse at 50% 40%, rgba(255,200,80,0.35) 0%, transparent 65%);
     }
   </style>
 </head>
@@ -26,65 +23,99 @@
     const bg = document.getElementById('bg');
     const flicker = document.getElementById('flicker');
 
-    const DURATION = 7 * 60 * 1000;
+    const DURATION     = 7 * 60 * 1000;
+    const RED_CUT_TIME = (5 * 60 + 30) * 1000;
+
     const start = performance.now();
 
-    const startColor = { r: 184, g: 134, b: 11 };
+    const startColor = { r: 184, g: 134, b: 11  };
     const endColor   = { r: 0,   g: 255, b: 136 };
+    const redColor   = { r: 212, g: 18,  b: 18  };
+
+    let redCut = false;
 
     function lerp(a, b, t) { return a + (b - a) * t; }
-
+    function clamp(v) { return Math.max(0, Math.min(255, Math.round(v))); }
     function toHex(r, g, b) {
-      return '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+      return '#' + [r, g, b].map(v => clamp(v).toString(16).padStart(2, '0')).join('');
+    }
+    function easeInOutQuint(t) {
+      return t < 0.5 ? 16 * t * t * t * t * t : 1 - Math.pow(-2 * t + 2, 5) / 2;
     }
 
-    function easeInOut(t) {
-      return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    // Multi-layer flicker: slow sway + fast sputter
+    let slowTarget = 0, slowCurrent = 0, slowTimer = 0, slowDuration = 0;
+    let fastTarget = 0, fastCurrent = 0, fastTimer = 0, fastDuration = 0;
+
+    function scheduleSlow() {
+      slowTimer = 0;
+      slowDuration = 300 + Math.random() * 600;
+      // More frequent and stronger dips
+      slowTarget = Math.random() < 0.55
+        ? (Math.random() * 0.7 + 0.15)
+        : (Math.random() * 0.1);
     }
 
-    let flickerTarget = 0, flickerCurrent = 0;
-    let flickerTimer = 0, flickerDuration = 0;
-
-    function scheduleFlicker() {
-      flickerTimer = 0;
-      flickerDuration = 80 + Math.random() * 300;
-      flickerTarget = Math.random() < 0.35 ? (Math.random() * 0.55 + 0.08) : 0;
+    function scheduleFast() {
+      fastTimer = 0;
+      fastDuration = 40 + Math.random() * 120;
+      fastTarget = Math.random() < 0.4
+        ? (Math.random() * 0.4 + 0.1)
+        : 0;
     }
 
-    scheduleFlicker();
+    scheduleSlow();
+    scheduleFast();
 
-    let lastT = 0;
+    let lastNow = performance.now();
 
     function tick(now) {
       const elapsed = now - start;
+      const dt = Math.min(now - lastNow, 100);
+      lastNow = now;
+
       const rawT = Math.min(elapsed / DURATION, 1);
-      const t = easeInOut(rawT);
+      const t = easeInOutQuint(rawT);
 
-      const r = lerp(startColor.r, endColor.r, t);
-      const g = lerp(startColor.g, endColor.g, t);
-      const b = lerp(startColor.b, endColor.b, t);
+      let r, g, b;
 
-      const dt = now - lastT;
-      lastT = now;
-
-      flickerTimer += dt;
-      if (flickerTimer >= flickerDuration) {
-        scheduleFlicker();
+      if (elapsed >= RED_CUT_TIME) {
+        if (!redCut) redCut = true;
+        r = redColor.r;
+        g = redColor.g;
+        b = redColor.b;
+      } else {
+        r = lerp(startColor.r, endColor.r, t);
+        g = lerp(startColor.g, endColor.g, t);
+        b = lerp(startColor.b, endColor.b, t);
       }
-      const flickerProgress = Math.min(flickerTimer / flickerDuration, 1);
-      const easedFlicker = Math.sin(flickerProgress * Math.PI);
-      flickerCurrent = flickerCurrent + (flickerTarget - flickerCurrent) * 0.12;
-      const flickerOpacity = flickerCurrent * easedFlicker;
 
-      const dim = 1 - flickerOpacity * 0.18;
+      // Slow sway
+      slowTimer += dt;
+      if (slowTimer >= slowDuration) scheduleSlow();
+      const slowP = Math.min(slowTimer / slowDuration, 1);
+      slowCurrent += (slowTarget - slowCurrent) * 0.04;
+
+      // Fast sputter
+      fastTimer += dt;
+      if (fastTimer >= fastDuration) scheduleFast();
+      const fastP = Math.min(fastTimer / fastDuration, 1);
+      fastCurrent += (fastTarget - fastCurrent) * 0.18;
+      const fastEased = Math.sin(fastP * Math.PI);
+
+      // Combine: slow base + fast sputter on top
+      const combined = slowCurrent * 0.65 + fastCurrent * fastEased * 0.35;
+      const fo = Math.min(combined, 0.85);
+
+      // Dim multiplier — stronger dip effect
+      const dim = 1 - fo * 0.28;
 
       bg.style.background = toHex(r * dim, g * dim, b * dim);
-      flicker.style.opacity = flickerOpacity.toFixed(3);
+      flicker.style.opacity = (fo * 0.9).toFixed(3);
 
-      if (rawT < 1) requestAnimationFrame(tick);
+      requestAnimationFrame(tick);
     }
 
-    lastT = performance.now();
     requestAnimationFrame(tick);
   </script>
 </body>
