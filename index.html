@@ -6,32 +6,38 @@
   <title>Candle Gradient</title>
   <style>
     body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-    #bg { position: fixed; inset: 0; background: #B8860B; }
-    #flicker {
-      position: fixed; inset: 0;
+    #bg { position: fixed; inset: 0; background: #B8860B; transition: none; }
+    #glow {
+      position: fixed; inset: -20%;
       pointer-events: none;
       mix-blend-mode: screen;
       opacity: 0;
-      background: radial-gradient(ellipse at 50% 40%, rgba(255,225,120,0.62) 0%, rgba(255,170,60,0.22) 38%, transparent 72%);
+      background: radial-gradient(ellipse at 50% 45%, rgba(255,180,60,0.9) 0%, rgba(255,120,0,0.5) 30%, transparent 70%);
+    }
+    #shadow {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      background: #000;
+      opacity: 0;
     }
   </style>
 </head>
 <body>
   <div id="bg"></div>
-  <div id="flicker"></div>
+  <div id="shadow"></div>
+  <div id="glow"></div>
   <script>
-    const bg = document.getElementById('bg');
-    const flicker = document.getElementById('flicker');
+    const bg     = document.getElementById('bg');
+    const glow   = document.getElementById('glow');
+    const shadow = document.getElementById('shadow');
 
     const DURATION     = 7 * 60 * 1000;
-    const RED_CUT_TIME = (5 * 60 + 30) * 1000;
-
+    const RED_CUT_TIME = 6 * 60 * 1000;
     const start = performance.now();
 
     const startColor = { r: 184, g: 134, b: 11  };
     const endColor   = { r: 0,   g: 255, b: 136 };
     const redColor   = { r: 212, g: 18,  b: 18  };
-
     let redCut = false;
 
     function lerp(a, b, t) { return a + (b - a) * t; }
@@ -43,29 +49,34 @@
       return t < 0.5 ? 16 * t * t * t * t * t : 1 - Math.pow(-2 * t + 2, 5) / 2;
     }
 
-    // Multi-layer flicker: slow sway + fast sputter
+    // Flicker layers
     let slowTarget = 0, slowCurrent = 0, slowTimer = 0, slowDuration = 0;
     let fastTarget = 0, fastCurrent = 0, fastTimer = 0, fastDuration = 0;
+    // Dramatic surge layer — big brightness pulses
+    let surgeTarget = 0, surgeCurrent = 0, surgeTimer = 0, surgeDuration = 0;
 
     function scheduleSlow() {
       slowTimer = 0;
-      slowDuration = 180 + Math.random() * 420;
-      // Bias toward noticeable swings
-      slowTarget = Math.random() < 0.8
-        ? (Math.random() * 0.75 + 0.2)
-        : (Math.random() * 0.12);
+      slowDuration = 200 + Math.random() * 500;
+      slowTarget = Math.random() < 0.65 ? (Math.random() * 0.9 + 0.1) : (Math.random() * 0.05);
     }
 
     function scheduleFast() {
       fastTimer = 0;
-      fastDuration = 22 + Math.random() * 78;
-      fastTarget = Math.random() < 0.72
-        ? (Math.random() * 0.75 + 0.22)
-        : 0;
+      fastDuration = 30 + Math.random() * 100;
+      fastTarget = Math.random() < 0.5 ? (Math.random() * 0.7 + 0.2) : 0;
+    }
+
+    function scheduleSurge() {
+      surgeTimer = 0;
+      // Big slow dramatic heaves
+      surgeDuration = 600 + Math.random() * 1200;
+      surgeTarget = Math.random() < 0.45 ? (Math.random() * 1.0 + 0.0) : 0;
     }
 
     scheduleSlow();
     scheduleFast();
+    scheduleSurge();
 
     let lastNow = performance.now();
 
@@ -78,12 +89,9 @@
       const t = easeInOutQuint(rawT);
 
       let r, g, b;
-
       if (elapsed >= RED_CUT_TIME) {
         if (!redCut) redCut = true;
-        r = redColor.r;
-        g = redColor.g;
-        b = redColor.b;
+        r = redColor.r; g = redColor.g; b = redColor.b;
       } else {
         r = lerp(startColor.r, endColor.r, t);
         g = lerp(startColor.g, endColor.g, t);
@@ -93,25 +101,38 @@
       // Slow sway
       slowTimer += dt;
       if (slowTimer >= slowDuration) scheduleSlow();
-      const slowP = Math.min(slowTimer / slowDuration, 1);
-      slowCurrent += (slowTarget - slowCurrent) * 0.04;
+      slowCurrent += (slowTarget - slowCurrent) * 0.05;
 
       // Fast sputter
       fastTimer += dt;
       if (fastTimer >= fastDuration) scheduleFast();
       const fastP = Math.min(fastTimer / fastDuration, 1);
-      fastCurrent += (fastTarget - fastCurrent) * 0.32;
-      const fastEased = Math.pow(Math.sin(fastP * Math.PI), 0.8);
+      fastCurrent += (fastTarget - fastCurrent) * 0.22;
+      const fastEased = Math.sin(fastP * Math.PI);
 
-      // Combine: slow base + fast sputter on top
-      const combined = slowCurrent * 0.55 + fastCurrent * fastEased * 0.75;
-      const fo = Math.min(combined, 1);
+      // Surge
+      surgeTimer += dt;
+      if (surgeTimer >= surgeDuration) scheduleSurge();
+      surgeCurrent += (surgeTarget - surgeCurrent) * 0.025;
 
-      // Dim multiplier — stronger dip effect
-      const dim = 1 - fo * 0.45;
+      // Combine all layers
+      const flickerVal = Math.min(
+        slowCurrent * 0.4 + fastCurrent * fastEased * 0.3 + surgeCurrent * 0.3,
+        1.0
+      );
+
+      // Strong dim: up to 55% darkness drop
+      const dim = 1 - flickerVal * 0.55;
+
+      // Shadow overlay for extra darkness punch
+      const shadowOpacity = flickerVal * 0.45;
+
+      // Glow brightens on high flicker
+      const glowOpacity = flickerVal * 0.85;
 
       bg.style.background = toHex(r * dim, g * dim, b * dim);
-      flicker.style.opacity = (fo * 1.22).toFixed(3);
+      shadow.style.opacity = shadowOpacity.toFixed(3);
+      glow.style.opacity = glowOpacity.toFixed(3);
 
       requestAnimationFrame(tick);
     }
